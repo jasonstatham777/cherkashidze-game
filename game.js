@@ -2,6 +2,7 @@
 class PreloaderScene extends Phaser.Scene {
     constructor() { super('PreloaderScene'); }
     preload() {
+        // ... (здесь ваш код предзагрузчика без изменений, я его сократил для краткости)
         this.add.rectangle(200, 300, 300, 100, 0x000000, 0.7);
         const progressBar = this.add.graphics();
         const progressBox = this.add.graphics();
@@ -34,20 +35,28 @@ class PreloaderScene extends Phaser.Scene {
 class GameScene extends Phaser.Scene {
     constructor() { super('GameScene'); }
 
-    create() {
+    // init() вызывается до create(), здесь мы сбрасываем все переменные
+    init() {
         this.isGameOver = false;
         this.isGameStarted = false;
         this.score = 0;
         this.gameSpeed = 120;
         this.activePowerupTimers = {};
+    }
+
+    create() {
         this.loadProgress();
         this.add.image(400 / 2, 600 / 2, 'background');
+
+        // Глобальный Mute теперь управляется через registry, это надежнее
         this.sound.mute = this.isMuted;
         if (!window.music) {
             window.music = this.sound.add('background_music', { loop: true });
         }
+        
         const startText = this.add.text(400 / 2, 600 / 2, 'Нажмите, чтобы начать', { fontSize: '28px', fill: '#ffffff', backgroundColor: 'rgba(0,0,0,0.5)', padding: { x: 20, y: 10 }, stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(10);
         this.physics.pause();
+
         this.input.once('pointerdown', () => {
             this.isGameStarted = true;
             startText.destroy();
@@ -56,6 +65,7 @@ class GameScene extends Phaser.Scene {
                 window.music.play();
             }
         });
+
         const MUTE_ICON_ON = '🔊';
         const MUTE_ICON_OFF = '🔇';
         this.muteBtn = this.add.text(400 - 16, 16, this.isMuted ? MUTE_ICON_OFF : MUTE_ICON_ON, { fontSize: '24px' }).setOrigin(1, 0).setInteractive().setDepth(10);
@@ -65,26 +75,34 @@ class GameScene extends Phaser.Scene {
             this.sound.mute = this.isMuted;
             this.saveProgress();
         });
+
         this.player = this.physics.add.sprite(400 / 2, 600 - 50, 'player');
         this.player.setCollideWorldBounds(true);
         this.player.isShielded = false;
         this.player.isMagnetActive = false;
         this.player.scoreMultiplier = 1;
+
         this.shieldEffect = this.add.sprite(this.player.x, this.player.y, 'shield_effect').setVisible(false).setDepth(1);
+
         this.cursors = this.input.keyboard.createCursorKeys();
         this.input.on('pointerdown', (p) => { if (this.isGameStarted && !this.isGameOver && p.target !== this.muteBtn) { p.x < 400 / 2 ? this.player.setVelocityX(-250) : this.player.setVelocityX(250); }});
         this.input.on('pointerup', () => { if (this.isGameStarted && !this.isGameOver) this.player.setVelocityX(0); });
+
         this.bananas = this.physics.add.group();
         this.obstacles = this.physics.add.group();
         this.powerups = this.physics.add.group();
+
         this.scoreText = this.add.text(16, 16, 'Очки: 0', { fontSize: '24px', fill: '#FFF', stroke: '#000', strokeThickness: 4 });
         this.timerText = this.add.text(16, 48, '', { fontSize: '18px', fill: '#87CEEB', stroke: '#000', strokeThickness: 4, lineSpacing: 4 });
         this.powerupText = this.add.text(400 / 2, 50, '', { fontSize: '28px', fill: '#FFD700', stroke: '#000', strokeThickness: 5 }).setOrigin(0.5);
+
         this.buildGameOverMenu();
         this.buildShopMenu();
+
         this.physics.add.overlap(this.player, this.bananas, this.collectBanana, null, this);
         this.physics.add.collider(this.player, this.obstacles, this.hitObstacle, null, this);
         this.physics.add.overlap(this.player, this.powerups, this.collectPowerup, null, this);
+
         this.time.addEvent({ delay: 1500, callback: this.addBanana, callbackScope: this, loop: true });
         this.time.addEvent({ delay: 2000, callback: this.addObstacle, callbackScope: this, loop: true });
         this.time.addEvent({ delay: 12000, callback: () => this.addPowerup('powerup_shield'), callbackScope: this, loop: true });
@@ -97,14 +115,17 @@ class GameScene extends Phaser.Scene {
         if (this.cursors.left.isDown) this.player.setVelocityX(-250);
         else if (this.cursors.right.isDown) this.player.setVelocityX(250);
         else if (!this.input.activePointer.isDown) this.player.setVelocityX(0);
+
         if (this.player.isShielded) this.shieldEffect.setPosition(this.player.x, this.player.y);
         if (this.player.isMagnetActive) {
             this.bananas.children.each((b) => { if (b && Phaser.Math.Distance.Between(this.player.x, this.player.y, b.x, b.y) < 150) this.physics.moveToObject(b, this.player, 300); });
         }
+
         this.gameSpeed += 2 * (delta / 1000);
         [this.bananas, this.obstacles, this.powerups].forEach(group => {
             group.children.each(item => { if (item) { item.y += this.gameSpeed * (delta / 1000); if (item.y > 600 + 50) item.destroy(); }});
         });
+
         let timerDisplayStrings = [];
         for (const key in this.activePowerupTimers) {
             if (this.activePowerupTimers[key] && this.activePowerupTimers[key].getRemaining() > 0) {
@@ -113,6 +134,7 @@ class GameScene extends Phaser.Scene {
         }
         this.timerText.setText(timerDisplayStrings.join('\n')).setVisible(timerDisplayStrings.length > 0);
     }
+
     addBanana() { if (!this.isGameStarted || this.isGameOver) return; this.bananas.create(Phaser.Math.Between(20, 400 - 20), -50, 'banana'); }
     addObstacle() { if (!this.isGameStarted || this.isGameOver) return; this.obstacles.create(Phaser.Math.Between(20, 400 - 20), -50, 'obstacle'); }
     addPowerup(type) { if (!this.isGameStarted || this.isGameOver) return; this.powerups.create(Phaser.Math.Between(20, 400 - 20), -50, type); }
@@ -122,7 +144,37 @@ class GameScene extends Phaser.Scene {
     activateMagnet() { if (this.activePowerupTimers['Магнит']) this.activePowerupTimers['Магнит'].remove(); this.player.isMagnetActive = true; this.displayPowerupText('МАГНИТ!'); this.activePowerupTimers['Магнит'] = this.time.addEvent({ delay: this.magnetDuration, callback: () => { this.player.isMagnetActive = false; this.activePowerupTimers['Магнит'] = null; } }); }
     activateScoreDoubler() { if (this.activePowerupTimers['Очки x2']) this.activePowerupTimers['Очки x2'].remove(); this.player.scoreMultiplier = 2; this.displayPowerupText('ОЧКИ x2!'); this.activePowerupTimers['Очки x2'] = this.time.addEvent({ delay: this.scoreX2Duration, callback: () => { this.player.scoreMultiplier = 1; this.activePowerupTimers['Очки x2'] = null; } }); }
     displayPowerupText(text) { this.powerupText.setText(text); this.time.addEvent({ delay: 2000, callback: () => this.powerupText.setText('') }); }
-    hitObstacle(player, obstacle) { if (player.isShielded) { obstacle.destroy(); player.isShielded = false; this.shieldEffect.setVisible(false); if (this.activePowerupTimers['Щит']) this.activePowerupTimers['Щит'].remove(); this.activePowerupTimers['Щит'] = null; return; } if (this.isGameOver) return; if (this.score > 0 && window.Telegram && window.Telegram.WebApp) { window.Telegram.WebApp.setGameScore(this.score, (error) => { if (error) { console.error('Ошибка при отправке счета:', error); } }); } this.sound.play('hit_sound'); if (window.music) window.music.stop(); this.isGameOver = true; this.physics.pause(); player.setTint(0xff0000); this.activePowerupTimers = {}; this.totalBananas += Math.floor(this.score / 10); this.saveProgress(); const scoreResultText = this.gameOverContainer.getByName('scoreResultText'); scoreResultText.setText(`Собрано: ${Math.floor(this.score / 10)} черкашей\nВсего черкашей: ${this.totalBananas}`); this.gameOverContainer.setVisible(true); }
+
+    hitObstacle(player, obstacle) {
+        if (player.isShielded) {
+            obstacle.destroy();
+            player.isShielded = false;
+            this.shieldEffect.setVisible(false);
+            if (this.activePowerupTimers['Щит']) this.activePowerupTimers['Щит'].remove();
+            this.activePowerupTimers['Щит'] = null;
+            return;
+        }
+        if (this.isGameOver) return;
+
+        this.isGameOver = true;
+        this.physics.pause();
+        
+        if (this.score > 0 && window.Telegram && window.Telegram.WebApp) {
+            window.Telegram.WebApp.setGameScore(this.score);
+        }
+
+        this.sound.play('hit_sound');
+        if (window.music) window.music.stop();
+
+        player.setTint(0xff0000);
+        this.activePowerupTimers = {};
+        this.totalBananas += Math.floor(this.score / 10);
+        this.saveProgress();
+
+        const scoreResultText = this.gameOverContainer.getByName('scoreResultText');
+        scoreResultText.setText(`Собрано: ${Math.floor(this.score / 10)} черкашей\nВсего черкашей: ${this.totalBananas}`);
+        this.gameOverContainer.setVisible(true);
+    }
     saveProgress() { const progress = { totalBananas: this.totalBananas, shieldLevel: this.shieldLevel, magnetLevel: this.magnetLevel, scoreX2Level: this.scoreX2Level, isMuted: this.isMuted }; localStorage.setItem('bananaDashProgress', JSON.stringify(progress)); }
     loadProgress() { const progress = JSON.parse(localStorage.getItem('bananaDashProgress')); this.totalBananas = progress?.totalBananas || 0; this.shieldLevel = progress?.shieldLevel || 0; this.magnetLevel = progress?.magnetLevel || 0; this.scoreX2Level = progress?.scoreX2Level || 0; this.isMuted = progress?.isMuted || false; this.shieldDuration = 4000 + (this.shieldLevel * 1500); this.magnetDuration = 6000 + (this.magnetLevel * 1500); this.scoreX2Duration = 8000 + (this.scoreX2Level * 1500); }
     buildGameOverMenu() { this.gameOverContainer = this.add.container(400 / 2, 600 / 2).setVisible(false).setDepth(5); const bg = this.add.graphics().fillStyle(0x000000, 0.7).fillRect(-150, -150, 300, 300).lineStyle(2, 0xffffff, 1).strokeRect(-150, -150, 300, 300); const title = this.add.text(0, -120, 'ИГРА ОКОНЧЕНА', { fontSize: '28px', fill: '#ff4444' }).setOrigin(0.5); const scoreResultText = this.add.text(0, -50, '', { fontSize: '18px', fill: '#ffffff', align: 'center' }).setOrigin(0.5).setName('scoreResultText'); const restartBtn = this.add.text(0, 30, 'Перезапуск', { fontSize: '24px', fill: '#00ff00' }).setOrigin(0.5).setInteractive(); const shopBtn = this.add.text(0, 90, 'Магазин', { fontSize: '24px', fill: '#ffff00' }).setOrigin(0.5).setInteractive(); restartBtn.on('pointerdown', () => this.scene.start('GameScene')); shopBtn.on('pointerdown', () => { this.gameOverContainer.setVisible(false); this.updateShopText(); this.shopContainer.setVisible(true); }); [restartBtn, shopBtn].forEach(btn => { btn.on('pointerover', () => btn.setScale(1.1)); btn.on('pointerout', () => btn.setScale(1)); }); this.gameOverContainer.add([bg, title, scoreResultText, restartBtn, shopBtn]); }
