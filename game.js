@@ -49,15 +49,12 @@ class GameScene extends Phaser.Scene {
     create() {
         this.loadProgress();
         this.add.image(200, 300, 'background');
-
         this.sound.mute = this.isMuted;
         
-        if (!this.sound.get('background_music')) {
+        if (!this.sound.get('background_music') || !this.music) {
             this.music = this.sound.add('background_music', { loop: true });
-        } else {
-            this.music = this.sound.get('background_music');
         }
-
+        
         const startText = this.add.text(200, 300, 'Нажмите, чтобы начать', { fontSize: '28px', fill: '#ffffff', backgroundColor: 'rgba(0,0,0,0.5)', padding: { x: 20, y: 10 }, stroke: '#000', strokeThickness: 4 }).setOrigin(0.5).setDepth(10);
         this.physics.pause();
 
@@ -151,29 +148,41 @@ class GameScene extends Phaser.Scene {
             obstacle.destroy();
             player.isShielded = false;
             this.shieldEffect.setVisible(false);
-            if (this.activePowerupTimers['Щит']) this.activePowerupTimers['Щит'].remove();
-            this.activePowerupTimers['Щит'] = null;
+            if (this.activePowerupTimers['Щит']) {
+                this.activePowerupTimers['Щит'].remove();
+                this.activePowerupTimers['Щит'] = null;
+            }
             return;
         }
-        if (this.isGameOver) return;
-        
+        if (this.isGameOver) {
+            return;
+        }
+
         this.isGameOver = true;
         this.physics.pause();
         
-        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe.chat) {
-            window.Telegram.WebApp.setGameScore(this.score);
+        try {
+            if (this.score > 0 && window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.setGameScore(this.score);
+            }
+        } catch (e) {
+            console.error("Ошибка при отправке счета в Telegram:", e);
         }
 
         this.sound.play('hit_sound');
-        if (this.music) this.music.stop();
+        if (this.music && this.music.isPlaying) {
+            this.music.stop();
+        }
 
         player.setTint(0xff0000);
         this.totalBananas += Math.floor(this.score / 10);
         this.saveProgress();
         
-        const scoreResultText = this.gameOverContainer.getByName('scoreResultText');
-        scoreResultText.setText(`Собрано: ${Math.floor(this.score / 10)} черкашей\nВсего черкашей: ${this.totalBananas}`);
-        this.gameOverContainer.setVisible(true);
+        this.time.delayedCall(100, () => {
+            const scoreResultText = this.gameOverContainer.getByName('scoreResultText');
+            scoreResultText.setText(`Собрано: ${Math.floor(this.score / 10)} черкашей\nВсего черкашей: ${this.totalBananas}`);
+            this.gameOverContainer.setVisible(true);
+        });
     }
     
     saveProgress() { const progress = { totalBananas: this.totalBananas, shieldLevel: this.shieldLevel, magnetLevel: this.magnetLevel, scoreX2Level: this.scoreX2Level, isMuted: this.isMuted }; localStorage.setItem('bananaDashProgress', JSON.stringify(progress)); }
