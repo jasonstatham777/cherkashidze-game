@@ -1,3 +1,48 @@
+// ===== Telegram helper (для отправки очков в бот) =====
+const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+
+// простая функция для парсинга query-параметров из URL
+function getQueryParams() {
+    const params = {};
+    const qs = (window.location.search || '').replace(/^\?/, '');
+    if (!qs) return params;
+    qs.split('&').forEach(pair => {
+        const [k, v] = pair.split('=');
+        if (k) params[decodeURIComponent(k)] = decodeURIComponent(v || '');
+    });
+    return params;
+}
+
+// Отправка очков на сервер
+function submitScore(score) {
+    const params = getQueryParams();
+    const init = (tg && tg.initDataUnsafe) ? tg.initDataUnsafe : {};
+    const user = init.user || (params.from_id ? { id: Number(params.from_id) } : null);
+
+    if (!user || !user.id) {
+        console.log('Telegram user not found — не отправляем очки');
+        return;
+    }
+
+    const payload = {
+        user_id: Number(user.id),
+        score: Number(score) || 0,
+        chat_id: params.chat_id ? Number(params.chat_id) : (init.chat ? init.chat.id : null),
+        message_id: params.message_id ? Number(params.message_id) : null,
+        chat_instance: init.chat_instance || params.chat_instance || null
+    };
+
+    fetch('https://YOUR-REPLIT-APP-URL/setscore', {   // 👉 замени на свой URL Replit
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json().catch(()=>{}))
+    .then(res => console.log('submitScore response', res))
+    .catch(err => console.error('Error sending score to server:', err));
+}
+// ===== конец Telegram helper =====
+
 class PreloaderScene extends Phaser.Scene {
     constructor() { super('PreloaderScene'); }
 
@@ -143,6 +188,7 @@ class GameScene extends Phaser.Scene {
     activateScoreDoubler() { if (this.activePowerupTimers['Очки x2']) this.activePowerupTimers['Очки x2'].remove(); this.player.scoreMultiplier = 2; this.displayPowerupText('ОЧКИ x2!'); this.activePowerupTimers['Очки x2'] = this.time.addEvent({ delay: this.scoreX2Duration, callback: () => { this.player.scoreMultiplier = 1; this.activePowerupTimers['Очки x2'] = null; } }); }
     displayPowerupText(text) { this.powerupText.setText(text); this.time.addEvent({ delay: 2000, callback: () => this.powerupText.setText('') }); }
     
+    // === обновлённый метод hitObstacle с вызовом submitScore ===
     hitObstacle(player, obstacle) {
         if (player.isShielded) {
             obstacle.destroy();
@@ -160,13 +206,15 @@ class GameScene extends Phaser.Scene {
 
         this.isGameOver = true;
         this.physics.pause();
-        
+
         try {
-            if (this.score > 0 && window.Telegram && window.Telegram.WebApp) {
-                window.Telegram.WebApp.setGameScore(this.score);
+            if (this.score > 0) {
+                submitScore(this.score);
+            } else {
+                console.log('Score is 0 — не отправляем');
             }
         } catch (e) {
-            console.error("Ошибка при отправке счета в Telegram:", e);
+            console.error("Ошибка при отправке счета:", e);
         }
 
         this.sound.play('hit_sound');
@@ -177,7 +225,7 @@ class GameScene extends Phaser.Scene {
         player.setTint(0xff0000);
         this.totalBananas += Math.floor(this.score / 10);
         this.saveProgress();
-        
+
         this.time.delayedCall(100, () => {
             const scoreResultText = this.gameOverContainer.getByName('scoreResultText');
             scoreResultText.setText(`Собрано: ${Math.floor(this.score / 10)} черкашей\nВсего черкашей: ${this.totalBananas}`);
